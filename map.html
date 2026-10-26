@@ -1,0 +1,897 @@
+<!DOCTYPE html>
+<html lang="ko" class="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>NAV — Ultra Minimalist Route & GPS Navigation</title>
+
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          colors: {
+            brand: {
+              400: '#38bdf8',
+              500: '#0284c7',
+              600: '#0284c7',
+              accent: '#10b981',
+            },
+            darkbg: '#0b0f17',
+          },
+          fontFamily: {
+            sans: ['Inter', '-apple-system', 'BlinkMacSystemFont', 'Segoe UI', 'Roboto', 'sans-serif'],
+          }
+        }
+      }
+    }
+  </script>
+
+  <!-- Google Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+
+  <style>
+    /* Glassmorphism Styles */
+    .glass-panel {
+      background: rgba(15, 23, 42, 0.78);
+      backdrop-filter: blur(20px);
+      -webkit-backdrop-filter: blur(20px);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+    }
+    .light .glass-panel {
+      background: rgba(255, 255, 255, 0.85);
+      backdrop-filter: blur(20px);
+      -webkit-backdrop-filter: blur(20px);
+      border: 1px solid rgba(0, 0, 0, 0.08);
+    }
+
+    .glass-pill {
+      background: rgba(255, 255, 255, 0.06);
+      backdrop-filter: blur(12px);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+    }
+    .light .glass-pill {
+      background: rgba(0, 0, 0, 0.04);
+      backdrop-filter: blur(12px);
+      border: 1px solid rgba(0, 0, 0, 0.08);
+    }
+
+    /* Hide scrollbars */
+    .no-scrollbar::-webkit-scrollbar {
+      display: none;
+    }
+    .no-scrollbar {
+      -ms-overflow-style: none;
+      scrollbar-width: none;
+    }
+
+    /* Map canvas cursor */
+    canvas {
+      touch-action: none;
+    }
+  </style>
+</head>
+<body class="bg-darkbg text-slate-100 font-sans h-screen w-screen overflow-hidden select-none relative">
+
+  <!-- ================= CANVAS MAP CONTAINER ================= -->
+  <div class="absolute inset-0 z-0 bg-slate-950">
+    <canvas id="map-canvas" class="w-full h-full block cursor-grab active:cursor-grabbing"></canvas>
+  </div>
+
+  <!-- ================= TOP HEADER / STATUS BAR ================= -->
+  <header class="absolute top-4 left-4 right-4 z-20 pointer-events-none flex justify-between items-center">
+    <!-- Brand Badge -->
+    <div class="pointer-events-auto flex items-center space-x-2.5 px-3.5 py-2 rounded-2xl glass-panel shadow-xl">
+      <div class="w-7 h-7 rounded-xl bg-gradient-to-tr from-sky-500 to-emerald-400 flex items-center justify-center shadow-lg shadow-sky-500/30">
+        <svg class="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7"/>
+        </svg>
+      </div>
+      <span class="font-extrabold tracking-tight text-sm text-slate-900 dark:text-white">NAV <span class="text-xs font-medium text-sky-400">GPS</span></span>
+    </div>
+
+    <!-- Quick Status Badges -->
+    <div class="pointer-events-auto hidden sm:flex items-center space-x-2">
+      <div class="flex items-center space-x-2 px-3 py-1.5 rounded-xl glass-panel text-xs font-medium text-slate-700 dark:text-slate-300">
+        <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+        <span>GPS 수신 양호</span>
+      </div>
+      <div id="live-clock" class="px-3 py-1.5 rounded-xl glass-panel text-xs font-mono font-semibold text-slate-800 dark:text-slate-200">
+        12:00:00
+      </div>
+    </div>
+  </header>
+
+  <!-- ================= ROUTE PLANNING SIDE PANEL (MODE 1: OVERVIEW) ================= -->
+  <aside id="route-panel" class="absolute top-16 sm:top-20 left-4 right-4 sm:right-auto sm:w-[400px] z-30 transition-all duration-300 ease-out">
+    <div class="glass-panel rounded-3xl p-4 sm:p-5 shadow-2xl space-y-4">
+      
+      <!-- Departure & Destination Input Block -->
+      <div class="relative flex flex-col space-y-2.5">
+        <!-- Visual Connector Line -->
+        <div class="absolute left-4 top-4 bottom-4 w-0.5 bg-gradient-to-b from-emerald-400 via-sky-500 to-indigo-500 rounded-full z-10 pointer-events-none"></div>
+
+        <!-- Departure Input -->
+        <div class="relative flex items-center pl-8 pr-3 py-2.5 rounded-xl bg-slate-800/60 dark:bg-slate-900/60 border border-slate-700/40 focus-within:border-emerald-400 transition-colors">
+          <div class="absolute left-3 w-2.5 h-2.5 rounded-full bg-emerald-400 ring-4 ring-emerald-400/20"></div>
+          <input type="text" id="start-input" value="광화문 광장 (출발)" class="w-full bg-transparent text-xs sm:text-sm font-medium text-slate-900 dark:text-white placeholder-slate-400 outline-none truncate" placeholder="출발지 검색...">
+          <button id="btn-my-location" class="p-1 rounded-lg text-slate-400 hover:text-emerald-400 transition-colors" title="내 위치">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
+          </button>
+        </div>
+
+        <!-- Destination Input -->
+        <div class="relative flex items-center pl-8 pr-3 py-2.5 rounded-xl bg-slate-800/60 dark:bg-slate-900/60 border border-slate-700/40 focus-within:border-sky-400 transition-colors">
+          <div class="absolute left-3 w-2.5 h-2.5 rounded-full bg-sky-500 ring-4 ring-sky-500/20"></div>
+          <input type="text" id="end-input" value="강남역 2호선 (도착)" class="w-full bg-transparent text-xs sm:text-sm font-medium text-slate-900 dark:text-white placeholder-slate-400 outline-none truncate" placeholder="도착지 검색...">
+          <button id="btn-swap-locations" class="p-1 rounded-lg text-slate-400 hover:text-sky-400 transition-colors" title="출발/도착 교체">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16V4m0 0L3 8m4-4l4 4m6 0v12m0 0l4-4m-4 4l-4-4"/></svg>
+          </button>
+        </div>
+      </div>
+
+      <!-- Transport Mode Pills -->
+      <div class="flex items-center justify-between gap-1.5 p-1 rounded-2xl bg-slate-900/60 border border-slate-800">
+        <button data-mode="drive" class="mode-pill flex-1 flex flex-col items-center py-2 px-1 rounded-xl bg-sky-500 text-white shadow-md transition-all">
+          <svg class="w-4 h-4 mb-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 17a2 2 0 11-4 0 2 2 0 014 0zM19 17a2 2 0 11-4 0 2 2 0 014 0z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16V6a1 1 0 00-1-1H4a1 1 0 00-1 1v10a1 1 0 001 1h1m8-1a1 1 0 01-1 1H9m4-1V8a1 1 0 011-1h2.586a1 1 0 01.707.293l3.414 3.414a1 1 0 01.293.707V16a1 1 0 01-1 1h-1m-6-1a1 1 0 001 1h1M5 17a2 2 0 104 0m-4 0a2 2 0 114 0m6 0a2 2 0 104 0m-4 0a2 2 0 114 0"/></svg>
+          <span class="text-[11px] font-bold">승용차</span>
+          <span class="text-[9px] opacity-80">24분</span>
+        </button>
+
+        <button data-mode="transit" class="mode-pill flex-1 flex flex-col items-center py-2 px-1 rounded-xl text-slate-400 hover:text-white transition-all">
+          <svg class="w-4 h-4 mb-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7h8m-8 4h8m-4 8v2m-4-2v2m-2-4h12a2 2 0 002-2V5a2 2 0 00-2-2H6a2 2 0 00-2 2v10a2 2 0 002 2z"/></svg>
+          <span class="text-[11px] font-bold">대중교통</span>
+          <span class="text-[9px] opacity-80">38분</span>
+        </button>
+
+        <button data-mode="walk" class="mode-pill flex-1 flex flex-col items-center py-2 px-1 rounded-xl text-slate-400 hover:text-white transition-all">
+          <svg class="w-4 h-4 mb-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>
+          <span class="text-[11px] font-bold">도보</span>
+          <span class="text-[9px] opacity-80">3시간</span>
+        </button>
+
+        <button data-mode="bike" class="mode-pill flex-1 flex flex-col items-center py-2 px-1 rounded-xl text-slate-400 hover:text-white transition-all">
+          <svg class="w-4 h-4 mb-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3.055 11H5a2 2 0 012 2v1a2 2 0 002 2 2 2 0 012 2v2.945M8 3.935V5.5A2.5 2.5 0 0010.5 8h.5a2 2 0 012 2 2 2 0 002 2h1.5a2.5 2.5 0 002.5-2.5V9a2 2 0 00-2-2h-1.5a2 2 0 01-2-2V4.055"/></svg>
+          <span class="text-[11px] font-bold">자전거</span>
+          <span class="text-[9px] opacity-80">54분</span>
+        </button>
+      </div>
+
+      <!-- Route Option Cards -->
+      <div class="space-y-2 max-h-[220px] overflow-y-auto no-scrollbar">
+        <!-- Route 1: Optimal -->
+        <div data-route="0" class="route-card cursor-pointer p-3 rounded-2xl bg-sky-500/15 border-2 border-sky-500 transition-all flex items-center justify-between">
+          <div>
+            <div class="flex items-center space-x-2">
+              <span class="px-2 py-0.5 rounded-md bg-sky-500 text-white font-extrabold text-[10px]">추천 1</span>
+              <span class="text-xs font-semibold text-slate-700 dark:text-slate-300">남산3호터널 • 반포대교</span>
+            </div>
+            <div class="mt-1 flex items-baseline space-x-2">
+              <span class="text-xl font-black text-slate-900 dark:text-white">24<span class="text-xs font-normal">분</span></span>
+              <span class="text-xs text-slate-400 font-medium">18.2 km</span>
+              <span class="text-xs text-slate-400">• 통행료 1,200원</span>
+            </div>
+          </div>
+          <div class="text-right">
+            <span class="inline-block w-2.5 h-2.5 rounded-full bg-emerald-400 mb-1"></span>
+            <div class="text-[10px] text-emerald-400 font-bold">원활</div>
+          </div>
+        </div>
+
+        <!-- Route 2: Free -->
+        <div data-route="1" class="route-card cursor-pointer p-3 rounded-2xl bg-slate-800/40 border border-slate-700/50 hover:border-slate-500 transition-all flex items-center justify-between opacity-80 hover:opacity-100">
+          <div>
+            <div class="flex items-center space-x-2">
+              <span class="px-2 py-0.5 rounded-md bg-slate-700 text-slate-200 font-extrabold text-[10px]">무료</span>
+              <span class="text-xs font-semibold text-slate-700 dark:text-slate-300">한남대교 • 강남대로</span>
+            </div>
+            <div class="mt-1 flex items-baseline space-x-2">
+              <span class="text-xl font-black text-slate-900 dark:text-white">29<span class="text-xs font-normal">분</span></span>
+              <span class="text-xs text-slate-400 font-medium">19.5 km</span>
+              <span class="text-xs text-slate-400">• 무료 도로</span>
+            </div>
+          </div>
+          <div class="text-right">
+            <span class="inline-block w-2.5 h-2.5 rounded-full bg-amber-400 mb-1"></span>
+            <div class="text-[10px] text-amber-400 font-bold">서행</div>
+          </div>
+        </div>
+
+        <!-- Route 3: Shortest -->
+        <div data-route="2" class="route-card cursor-pointer p-3 rounded-2xl bg-slate-800/40 border border-slate-700/50 hover:border-slate-500 transition-all flex items-center justify-between opacity-80 hover:opacity-100">
+          <div>
+            <div class="flex items-center space-x-2">
+              <span class="px-2 py-0.5 rounded-md bg-slate-700 text-slate-200 font-extrabold text-[10px]">최단</span>
+              <span class="text-xs font-semibold text-slate-700 dark:text-slate-300">동작대교 • 올림픽대로</span>
+            </div>
+            <div class="mt-1 flex items-baseline space-x-2">
+              <span class="text-xl font-black text-slate-900 dark:text-white">27<span class="text-xs font-normal">분</span></span>
+              <span class="text-xs text-slate-400 font-medium">16.8 km</span>
+              <span class="text-xs text-slate-400">• 신호 정체</span>
+            </div>
+          </div>
+          <div class="text-right">
+            <span class="inline-block w-2.5 h-2.5 rounded-full bg-emerald-400 mb-1"></span>
+            <div class="text-[10px] text-emerald-400 font-bold">원활</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Action Button: Start Navigation -->
+      <button id="btn-start-nav" class="w-full py-3.5 rounded-2xl bg-gradient-to-r from-sky-500 to-emerald-500 hover:from-sky-400 hover:to-emerald-400 text-white font-extrabold text-sm sm:text-base tracking-wide shadow-lg shadow-sky-500/25 active:scale-[0.98] transition-all flex items-center justify-center space-x-2">
+        <svg class="w-5 h-5 fill-current" viewBox="0 0 24 24"><path d="M12 2L4.5 20.29l.71.71L12 18l6.79 3 .71-.71z"/></svg>
+        <span>안내 시작 (GPS 내비)</span>
+      </button>
+
+    </div>
+  </aside>
+
+  <!-- ================= LIVE TURN-BY-TURN HUD (MODE 2: NAVIGATION) ================= -->
+  <div id="hud-panel" class="absolute top-16 left-4 right-4 sm:left-6 sm:right-auto sm:w-[420px] z-30 transition-all duration-300 transform -translate-y-12 opacity-0 pointer-events-none">
+    
+    <!-- Top Turn Instruction Box -->
+    <div class="glass-panel rounded-3xl p-5 shadow-2xl border-l-4 border-l-sky-400 space-y-3">
+      <div class="flex items-center justify-between">
+        <div class="flex items-center space-x-4">
+          <!-- Turn Icon -->
+          <div class="w-14 h-14 rounded-2xl bg-sky-500 text-white flex items-center justify-center shadow-lg shadow-sky-500/30">
+            <svg id="hud-turn-icon" class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M14 5l7 7m0 0l-7 7m7-7H3"/>
+            </svg>
+          </div>
+          <div>
+            <div class="flex items-baseline space-x-1">
+              <span id="hud-turn-dist" class="text-3xl font-black text-slate-900 dark:text-white">300</span>
+              <span class="text-sm font-bold text-sky-400">m</span>
+            </div>
+            <div id="hud-turn-text" class="text-sm font-bold text-slate-700 dark:text-slate-200 mt-0.5 truncate">
+              강남대로 방면 우회전
+            </div>
+          </div>
+        </div>
+
+        <!-- Speedometer & Limit Pill -->
+        <div class="flex flex-col items-center justify-center px-3 py-2 rounded-2xl bg-slate-900/80 border border-slate-700/60">
+          <span id="hud-speed" class="text-2xl font-black text-emerald-400 font-mono">72</span>
+          <span class="text-[9px] font-bold text-slate-400 uppercase">km/h</span>
+          <div class="mt-1 w-6 h-6 rounded-full border-2 border-red-500 bg-white text-slate-900 font-black text-[9px] flex items-center justify-center">
+            80
+          </div>
+        </div>
+      </div>
+
+      <!-- Lane Guidance -->
+      <div class="pt-2 border-t border-slate-800 flex items-center justify-between text-xs text-slate-400">
+        <div class="flex items-center space-x-1.5">
+          <span class="px-2 py-0.5 rounded bg-slate-800 text-slate-300 text-[10px] font-semibold">차로</span>
+          <span class="text-slate-600 dark:text-slate-400">1 2 <strong class="text-sky-400">3</strong> 4</span>
+        </div>
+        <span id="hud-next-step" class="text-[11px] text-slate-400">다음: 1.2km 직진</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Bottom HUD ETA Bar (Navigation Mode) -->
+  <div id="hud-bottom-bar" class="absolute bottom-6 left-4 right-4 sm:left-1/2 sm:-translate-x-1/2 sm:w-[500px] z-30 transition-all duration-300 transform translate-y-12 opacity-0 pointer-events-none">
+    <div class="glass-panel rounded-3xl p-4 shadow-2xl flex items-center justify-between">
+      
+      <div class="flex items-center space-x-4">
+        <div>
+          <div class="text-[10px] uppercase font-bold text-slate-400 tracking-wider">남은 시간 / 거리</div>
+          <div class="flex items-baseline space-x-2">
+            <span id="hud-rem-time" class="text-2xl font-black text-slate-900 dark:text-white">18<span class="text-xs font-semibold">분</span></span>
+            <span id="hud-rem-dist" class="text-sm font-bold text-sky-400">12.4 km</span>
+          </div>
+        </div>
+        
+        <div class="h-8 w-[1px] bg-slate-800"></div>
+
+        <div>
+          <div class="text-[10px] uppercase font-bold text-slate-400 tracking-wider">도착 예정</div>
+          <div id="hud-eta-time" class="text-base font-extrabold text-slate-700 dark:text-slate-200">
+            17:42
+          </div>
+        </div>
+      </div>
+
+      <!-- Exit Navigation Button -->
+      <button id="btn-stop-nav" class="px-4 py-2.5 rounded-2xl bg-red-500/20 hover:bg-red-500 text-red-400 hover:text-white border border-red-500/40 text-xs font-bold transition-all active:scale-95 flex items-center space-x-1">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+        <span>안내 종료</span>
+      </button>
+
+    </div>
+  </div>
+
+
+  <!-- ================= RIGHT SIDE FLOATING MAP CONTROLS ================= -->
+  <div class="absolute right-4 top-20 sm:top-24 z-20 flex flex-col space-y-2.5">
+    
+    <!-- Zoom In -->
+    <button id="btn-zoom-in" class="w-11 h-11 rounded-2xl glass-panel text-slate-700 dark:text-slate-200 hover:text-sky-400 flex items-center justify-center shadow-lg active:scale-90 transition-all" title="확대">
+      <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M12 6v6m0 0v6m0-6h6m-6 0H6"/></svg>
+    </button>
+
+    <!-- Zoom Out -->
+    <button id="btn-zoom-out" class="w-11 h-11 rounded-2xl glass-panel text-slate-700 dark:text-slate-200 hover:text-sky-400 flex items-center justify-center shadow-lg active:scale-90 transition-all" title="축소">
+      <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M20 12H4"/></svg>
+    </button>
+
+    <!-- Recenter GPS -->
+    <button id="btn-recenter" class="w-11 h-11 rounded-2xl glass-panel text-slate-700 dark:text-slate-200 hover:text-emerald-400 flex items-center justify-center shadow-lg active:scale-90 transition-all" title="내 위치로">
+      <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"/></svg>
+    </button>
+
+    <!-- 2D / 3D Tilt Toggle -->
+    <button id="btn-tilt-toggle" class="w-11 h-11 rounded-2xl glass-panel text-slate-700 dark:text-slate-200 hover:text-amber-400 flex items-center justify-center shadow-lg font-black text-xs active:scale-90 transition-all" title="2D/3D 시점 전환">
+      3D
+    </button>
+
+    <!-- Traffic Layer Toggle -->
+    <button id="btn-traffic-toggle" class="w-11 h-11 rounded-2xl glass-panel text-emerald-400 flex items-center justify-center shadow-lg active:scale-90 transition-all" title="교통정보 표시">
+      <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>
+    </button>
+
+    <!-- Theme Switcher (Dark/Light Map) -->
+    <button id="btn-theme-toggle" class="w-11 h-11 rounded-2xl glass-panel text-slate-700 dark:text-slate-200 hover:text-sky-400 flex items-center justify-center shadow-lg active:scale-90 transition-all" title="지도 테마 전환">
+      <svg class="w-5 h-5 block dark:hidden" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z"/></svg>
+      <svg class="w-5 h-5 hidden dark:block" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z"/></svg>
+    </button>
+  </div>
+
+
+  <!-- ================= INTERACTIVE CANVAS MAP ENGINE & UI LOGIC ================= -->
+  <script>
+    // --- 1. CLOCK LOGIC ---
+    function updateClock() {
+      const now = new Date();
+      const timeStr = now.toTimeString().split(' ')[0];
+      document.getElementById('live-clock').textContent = timeStr;
+    }
+    setInterval(updateClock, 1000);
+    updateClock();
+
+    // --- 2. VECTOR CANVAS MAP ENGINE ---
+    const canvas = document.getElementById('map-canvas');
+    const ctx = canvas.getContext('2d');
+
+    // Canvas State
+    let width = 0;
+    let height = 0;
+    let isDarkMode = true;
+    let is3D = false;
+    let showTraffic = true;
+    let isNavigating = false;
+
+    // Camera / Map View Transform State
+    let cameraX = 0;
+    let cameraY = 0;
+    let zoom = 1.0;
+    let targetZoom = 1.0;
+    let tiltAngle = 0; // 0 for 2D, 0.45 for 3D
+
+    // Interaction Drag State
+    let isDragging = false;
+    let dragStartX = 0;
+    let dragStartY = 0;
+    let cameraStartX = 0;
+    let cameraStartY = 0;
+
+    // Simulation & Vehicle State
+    let activeRouteIndex = 0;
+    let animProgress = 0; // 0 to 1 along path
+    let vehicleSpeed = 72; // km/h
+
+    // Map Coordinates Data (Seoul Metro Inspired Map Geometry)
+    const mapCenter = { x: 500, y: 500 };
+
+    // Primary Landmarks
+    const landmarks = [
+      { name: '광화문 광장', x: 280, y: 220, type: 'start' },
+      { name: '남산 서울타워', x: 480, y: 380, type: 'park' },
+      { name: '반포대교', x: 520, y: 560, type: 'bridge' },
+      { name: '강남역 (2호선)', x: 740, y: 760, type: 'end' },
+      { name: '여의도 금융지구', x: 200, y: 580, type: 'landmark' },
+      { name: '잠실 롯데타워', x: 880, y: 640, type: 'landmark' }
+    ];
+
+    // Han River Path
+    const riverPath = [
+      { x: -200, y: 620 },
+      { x: 150, y: 600 },
+      { x: 400, y: 540 },
+      { x: 650, y: 570 },
+      { x: 950, y: 620 },
+      { x: 1300, y: 680 }
+    ];
+
+    // Main Road Grid Lines
+    const mainRoads = [
+      // Ring Road / Highways
+      [{ x: 100, y: 300 }, { x: 900, y: 300 }, { x: 950, y: 800 }, { x: 150, y: 850 }, { x: 100, y: 300 }],
+      // Express Highway
+      [{ x: 280, y: 150 }, { x: 280, y: 850 }],
+      [{ x: 740, y: 150 }, { x: 740, y: 900 }],
+      [{ x: 100, y: 760 }, { x: 950, y: 760 }],
+      [{ x: 100, y: 420 }, { x: 950, y: 420 }]
+    ];
+
+    // Routes Definition (Start: Gwanghwamun -> End: Gangnam)
+    const routes = [
+      {
+        id: 0,
+        name: '추천 1 (남산3호터널)',
+        color: '#38bdf8', // Sky blue
+        path: [
+          { x: 280, y: 220 },
+          { x: 340, y: 290 },
+          { x: 420, y: 350 },
+          { x: 480, y: 460 },
+          { x: 520, y: 560 }, // Banpo Bridge
+          { x: 570, y: 660 },
+          { x: 660, y: 760 },
+          { x: 740, y: 760 }  // Gangnam
+        ],
+        traffic: ['green', 'green', 'orange', 'green', 'green', 'green', 'green']
+      },
+      {
+        id: 1,
+        name: '무료 (한남대교)',
+        color: '#94a3b8', // Gray
+        path: [
+          { x: 280, y: 220 },
+          { x: 450, y: 220 },
+          { x: 560, y: 320 },
+          { x: 620, y: 520 },
+          { x: 680, y: 650 },
+          { x: 740, y: 760 }
+        ],
+        traffic: ['green', 'orange', 'red', 'orange', 'green']
+      },
+      {
+        id: 2,
+        name: '최단 (동작대교)',
+        color: '#94a3b8',
+        path: [
+          { x: 280, y: 220 },
+          { x: 280, y: 420 },
+          { x: 380, y: 560 },
+          { x: 500, y: 760 },
+          { x: 740, y: 760 }
+        ],
+        traffic: ['green', 'green', 'orange', 'red']
+      }
+    ];
+
+    // Turn-by-Turn Instruction Nodes along Route 0
+    const maneuvers = [
+      { progress: 0.15, text: '남산1호터널 방면 직진', dist: 800, icon: 'straight' },
+      { progress: 0.35, text: '반포대교 방면 지하차도 진입', dist: 450, icon: 'straight' },
+      { progress: 0.55, text: '녹사평대로 방면 우회전', dist: 300, icon: 'right' },
+      { progress: 0.75, text: '테헤란로 방면 좌회전', dist: 500, icon: 'left' },
+      { progress: 0.92, text: '도착지 강남역 우측 차로', dist: 150, icon: 'destination' }
+    ];
+
+    // Resize Handler
+    function resizeCanvas() {
+      width = window.innerWidth;
+      height = window.innerHeight;
+      canvas.width = width * window.devicePixelRatio;
+      canvas.height = height * window.devicePixelRatio;
+      ctx.scale(window.devicePixelRatio, window.devicePixelRatio);
+
+      if (cameraX === 0 && cameraY === 0) {
+        cameraX = mapCenter.x;
+        cameraY = mapCenter.y;
+      }
+    }
+    window.addEventListener('resize', resizeCanvas);
+    resizeCanvas();
+
+    // Render Loop
+    function renderMap() {
+      // Smooth Zoom Interpolation
+      zoom += (targetZoom - zoom) * 0.1;
+      const targetTilt = is3D ? 0.45 : 0;
+      tiltAngle += (targetTilt - tiltAngle) * 0.1;
+
+      // Color Palette based on Theme
+      const palette = isDarkMode ? {
+        bg: '#090d16',
+        grid: '#1e293b',
+        river: '#1e3a8a',
+        riverEdge: '#3b82f6',
+        roadMain: '#1e293b',
+        roadSub: '#0f172a',
+        building: '#111827',
+        text: '#94a3b8'
+      } : {
+        bg: '#f8fafc',
+        grid: '#e2e8f0',
+        river: '#bfdbfe',
+        riverEdge: '#60a5fa',
+        roadMain: '#ffffff',
+        roadSub: '#f1f5f9',
+        building: '#e2e8f0',
+        text: '#475569'
+      };
+
+      // Clear Canvas
+      ctx.clearRect(0, 0, width, height);
+
+      // Save Transformation Matrix
+      ctx.save();
+
+      // Apply Center View Pivot & Zoom
+      ctx.translate(width / 2, height / 2);
+      ctx.scale(zoom, zoom * (1 - tiltAngle * 0.5)); // Perspective compression for 3D tilt
+
+      if (tiltAngle > 0.05) {
+        ctx.transform(1, 0, 0, 1 - tiltAngle * 0.3, 0, 0);
+      }
+
+      ctx.translate(-cameraX, -cameraY);
+
+      // --- 1. Background Fill ---
+      ctx.fillStyle = palette.bg;
+      ctx.fillRect(cameraX - width * 2, cameraY - height * 2, width * 4, height * 4);
+
+      // --- 2. Grid Pattern ---
+      ctx.strokeStyle = palette.grid;
+      ctx.lineWidth = 1;
+      const gridSize = 100;
+      const startX = Math.floor((cameraX - width) / gridSize) * gridSize;
+      const endX = Math.ceil((cameraX + width) / gridSize) * gridSize;
+      const startY = Math.floor((cameraY - height) / gridSize) * gridSize;
+      const endY = Math.ceil((cameraY + height) / gridSize) * gridSize;
+
+      for (let x = startX; x <= endX; x += gridSize) {
+        ctx.beginPath();
+        ctx.moveTo(x, startY);
+        ctx.lineTo(x, endY);
+        ctx.stroke();
+      }
+      for (let y = startY; y <= endY; y += gridSize) {
+        ctx.beginPath();
+        ctx.moveTo(startX, y);
+        ctx.lineTo(endX, y);
+        ctx.stroke();
+      }
+
+      // --- 3. River Rendering ---
+      ctx.beginPath();
+      ctx.moveTo(riverPath[0].x, riverPath[0].y);
+      for (let i = 1; i < riverPath.length; i++) {
+        const xc = (riverPath[i].x + riverPath[i - 1].x) / 2;
+        const yc = (riverPath[i].y + riverPath[i - 1].y) / 2;
+        ctx.quadraticCurveTo(riverPath[i - 1].x, riverPath[i - 1].y, xc, yc);
+      }
+      ctx.strokeStyle = palette.river;
+      ctx.lineWidth = 60;
+      ctx.lineCap = 'round';
+      ctx.lineJoin = 'round';
+      ctx.stroke();
+
+      // --- 4. Main Road Network ---
+      mainRoads.forEach(road => {
+        ctx.beginPath();
+        ctx.moveTo(road[0].x, road[0].y);
+        for (let i = 1; i < road.length; i++) {
+          ctx.lineTo(road[i].x, road[i].y);
+        }
+        ctx.strokeStyle = palette.roadMain;
+        ctx.lineWidth = 16;
+        ctx.lineCap = 'round';
+        ctx.lineJoin = 'round';
+        ctx.stroke();
+      });
+
+      // --- 5. Routes Polyline Highlight Rendering ---
+      routes.forEach((route, idx) => {
+        const isActive = (idx === activeRouteIndex);
+
+        // Draw under-layer shadow for active route
+        if (isActive) {
+          ctx.beginPath();
+          ctx.moveTo(route.path[0].x, route.path[0].y);
+          for (let i = 1; i < route.path.length; i++) {
+            ctx.lineTo(route.path[i].x, route.path[i].y);
+          }
+          ctx.strokeStyle = 'rgba(56, 189, 248, 0.3)';
+          ctx.lineWidth = 22;
+          ctx.stroke();
+        }
+
+        // Draw traffic segmented colored polylines
+        for (let i = 0; i < route.path.length - 1; i++) {
+          const p1 = route.path[i];
+          const p2 = route.path[i + 1];
+
+          ctx.beginPath();
+          ctx.moveTo(p1.x, p1.y);
+          ctx.lineTo(p2.x, p2.y);
+
+          if (isActive) {
+            let segColor = '#38bdf8'; // Default active blue
+            if (showTraffic && route.traffic[i]) {
+              if (route.traffic[i] === 'green') segColor = '#10b981';
+              else if (route.traffic[i] === 'orange') segColor = '#f59e0b';
+              else if (route.traffic[i] === 'red') segColor = '#ef4444';
+            }
+            ctx.strokeStyle = segColor;
+            ctx.lineWidth = 12;
+          } else {
+            ctx.strokeStyle = isDarkMode ? 'rgba(148, 163, 184, 0.35)' : 'rgba(100, 116, 139, 0.3)';
+            ctx.lineWidth = 6;
+          }
+          ctx.lineCap = 'round';
+          ctx.stroke();
+        }
+      });
+
+      // --- 6. Landmarks & Markers ---
+      landmarks.forEach(lm => {
+        ctx.fillStyle = palette.text;
+        ctx.font = '600 11px Inter, sans-serif';
+        ctx.fillText(lm.name, lm.x + 12, lm.y + 4);
+
+        if (lm.type === 'start') {
+          // Start Marker (Green Ring)
+          ctx.beginPath();
+          ctx.arc(lm.x, lm.y, 8, 0, Math.PI * 2);
+          ctx.fillStyle = '#10b981';
+          ctx.fill();
+          ctx.strokeStyle = '#ffffff';
+          ctx.lineWidth = 3;
+          ctx.stroke();
+        } else if (lm.type === 'end') {
+          // End Marker (Red Ring)
+          ctx.beginPath();
+          ctx.arc(lm.x, lm.y, 8, 0, Math.PI * 2);
+          ctx.fillStyle = '#ef4444';
+          ctx.fill();
+          ctx.strokeStyle = '#ffffff';
+          ctx.lineWidth = 3;
+          ctx.stroke();
+        }
+      });
+
+      // --- 7. Live Vehicle Position & Navigation Animated Simulation ---
+      if (isNavigating) {
+        animProgress += 0.0008 * (vehicleSpeed / 60);
+        if (animProgress > 1) animProgress = 0;
+
+        const currentRoute = routes[activeRouteIndex];
+        const currentPos = interpolatePath(currentRoute.path, animProgress);
+
+        // Center camera smoothly on vehicle during navigation mode
+        cameraX += (currentPos.x - cameraX) * 0.05;
+        cameraY += (currentPos.y - cameraY) * 0.05;
+
+        // Draw Pulsing Location Radar Circle
+        const pulseSize = 20 + Math.sin(Date.now() * 0.005) * 6;
+        ctx.beginPath();
+        ctx.arc(currentPos.x, currentPos.y, pulseSize, 0, Math.PI * 2);
+        ctx.fillStyle = 'rgba(56, 189, 248, 0.25)';
+        ctx.fill();
+
+        // Vehicle Arrow Marker
+        ctx.save();
+        ctx.translate(currentPos.x, currentPos.y);
+        ctx.rotate(currentPos.angle);
+
+        // Vehicle Body (Tesla-styled Navigation Arrow)
+        ctx.beginPath();
+        ctx.moveTo(0, -12);
+        ctx.lineTo(9, 10);
+        ctx.lineTo(0, 6);
+        ctx.lineTo(-9, 10);
+        ctx.closePath();
+        ctx.fillStyle = '#0284c7';
+        ctx.fill();
+        ctx.strokeStyle = '#ffffff';
+        ctx.lineWidth = 2.5;
+        ctx.stroke();
+
+        ctx.restore();
+
+        // Update HUD Values Dynamically
+        updateHUDNavigationInfo(animProgress);
+      }
+
+      ctx.restore();
+
+      requestAnimationFrame(renderMap);
+    }
+
+    // Helper: Interpolate coordinates along polyline
+    function interpolatePath(path, progress) {
+      if (progress <= 0) return { x: path[0].x, y: path[0].y, angle: 0 };
+      if (progress >= 1) return { x: path[path.length - 1].x, y: path[path.length - 1].y, angle: 0 };
+
+      const totalSegments = path.length - 1;
+      const segIndex = Math.min(Math.floor(progress * totalSegments), totalSegments - 1);
+      const segProgress = (progress * totalSegments) - segIndex;
+
+      const p1 = path[segIndex];
+      const p2 = path[segIndex + 1];
+
+      const x = p1.x + (p2.x - p1.x) * segProgress;
+      const y = p1.y + (p2.y - p1.y) * segProgress;
+      const angle = Math.atan2(p2.y - p1.y, p2.x - p1.x) + Math.PI / 2;
+
+      return { x, y, angle };
+    }
+
+    // Update Turn-by-Turn HUD contents dynamically
+    function updateHUDNavigationInfo(prog) {
+      let currentManeuver = maneuvers[0];
+      for (let i = 0; i < maneuvers.length; i++) {
+        if (prog >= maneuvers[i].progress) {
+          currentManeuver = maneuvers[i];
+        }
+      }
+
+      // Calculate distance remaining
+      const remDistKm = (18.2 * (1 - prog)).toFixed(1);
+      const remMin = Math.max(1, Math.round(24 * (1 - prog)));
+
+      document.getElementById('hud-turn-text').textContent = currentManeuver.text;
+      document.getElementById('hud-turn-dist').textContent = Math.round(currentManeuver.dist * (1 - (prog % 0.2)));
+      document.getElementById('hud-rem-dist').textContent = `${remDistKm} km`;
+      document.getElementById('hud-rem-time').innerHTML = `${remMin}<span class="text-xs font-semibold">분</span>`;
+
+      // Fluctuate Speed Realistically
+      vehicleSpeed = Math.floor(68 + Math.sin(Date.now() * 0.002) * 8);
+      document.getElementById('hud-speed').textContent = vehicleSpeed;
+
+      // ETA Time
+      const etaDate = new Date(Date.now() + remMin * 60000);
+      const etaHours = String(etaDate.getHours()).padStart(2, '0');
+      const etaMins = String(etaDate.getMinutes()).padStart(2, '0');
+      document.getElementById('hud-eta-time').textContent = `${etaHours}:${etaMins}`;
+    }
+
+    // --- 3. INTERACTIVE MAP CONTROLS & EVENT LISTENERS ---
+
+    // Mouse / Touch Drag Panning
+    canvas.addEventListener('mousedown', (e) => {
+      isDragging = true;
+      dragStartX = e.clientX;
+      dragStartY = e.clientY;
+      cameraStartX = cameraX;
+      cameraStartY = cameraY;
+    });
+
+    window.addEventListener('mousemove', (e) => {
+      if (!isDragging) return;
+      const dx = (e.clientX - dragStartX) / zoom;
+      const dy = (e.clientY - dragStartY) / zoom;
+      cameraX = cameraStartX - dx;
+      cameraY = cameraStartY - dy;
+    });
+
+    window.addEventListener('mouseup', () => isDragging = false);
+
+    // Zoom via Mouse Wheel
+    canvas.addEventListener('wheel', (e) => {
+      e.preventDefault();
+      if (e.deltaY < 0) {
+        targetZoom = Math.min(2.5, targetZoom + 0.15);
+      } else {
+        targetZoom = Math.max(0.5, targetZoom - 0.15);
+      }
+    });
+
+    // Right Control Buttons
+    document.getElementById('btn-zoom-in').addEventListener('click', () => {
+      targetZoom = Math.min(2.5, targetZoom + 0.25);
+    });
+
+    document.getElementById('btn-zoom-out').addEventListener('click', () => {
+      targetZoom = Math.max(0.5, targetZoom - 0.25);
+    });
+
+    document.getElementById('btn-recenter').addEventListener('click', () => {
+      cameraX = mapCenter.x;
+      cameraY = mapCenter.y;
+      targetZoom = 1.0;
+    });
+
+    document.getElementById('btn-tilt-toggle').addEventListener('click', (e) => {
+      is3D = !is3D;
+      e.currentTarget.classList.toggle('text-amber-400', is3D);
+    });
+
+    document.getElementById('btn-traffic-toggle').addEventListener('click', (e) => {
+      showTraffic = !showTraffic;
+      e.currentTarget.classList.toggle('opacity-40', !showTraffic);
+    });
+
+    document.getElementById('btn-theme-toggle').addEventListener('click', () => {
+      isDarkMode = !isDarkMode;
+      document.documentElement.classList.toggle('dark', isDarkMode);
+    });
+
+    // --- 4. ROUTE SELECTION & NAVIGATION MODE SWITCHING ---
+
+    // Route Card Clicking
+    const routeCards = document.querySelectorAll('.route-card');
+    routeCards.forEach((card) => {
+      card.addEventListener('click', () => {
+        const routeIdx = parseInt(card.dataset.route, 10);
+        activeRouteIndex = routeIdx;
+
+        routeCards.forEach(c => {
+          c.className = 'route-card cursor-pointer p-3 rounded-2xl bg-slate-800/40 border border-slate-700/50 hover:border-slate-500 transition-all flex items-center justify-between opacity-80 hover:opacity-100';
+        });
+
+        card.className = 'route-card cursor-pointer p-3 rounded-2xl bg-sky-500/15 border-2 border-sky-500 transition-all flex items-center justify-between';
+      });
+    });
+
+    // Transport Mode Pills Switching
+    const modePills = document.querySelectorAll('.mode-pill');
+    modePills.forEach(pill => {
+      pill.addEventListener('click', () => {
+        modePills.forEach(p => {
+          p.className = 'mode-pill flex-1 flex flex-col items-center py-2 px-1 rounded-xl text-slate-400 hover:text-white transition-all';
+        });
+        pill.className = 'mode-pill flex-1 flex flex-col items-center py-2 px-1 rounded-xl bg-sky-500 text-white shadow-md transition-all';
+      });
+    });
+
+    // Swap Departure / Destination
+    document.getElementById('btn-swap-locations').addEventListener('click', () => {
+      const startIn = document.getElementById('start-input');
+      const endIn = document.getElementById('end-input');
+      const temp = startIn.value;
+      startIn.value = endIn.value;
+      endIn.value = temp;
+    });
+
+    // Start Navigation HUD Mode
+    const routePanel = document.getElementById('route-panel');
+    const hudPanel = document.getElementById('hud-panel');
+    const hudBottomBar = document.getElementById('hud-bottom-bar');
+
+    document.getElementById('btn-start-nav').addEventListener('click', () => {
+      isNavigating = true;
+      is3D = true;
+      targetZoom = 1.4;
+      animProgress = 0;
+
+      // Transition Panels
+      routePanel.classList.add('-translate-x-12', 'opacity-0', 'pointer-events-none');
+      
+      setTimeout(() => {
+        hudPanel.classList.remove('-translate-y-12', 'opacity-0', 'pointer-events-none');
+        hudBottomBar.classList.remove('translate-y-12', 'opacity-0', 'pointer-events-none');
+      }, 150);
+    });
+
+    // Exit Navigation HUD Mode
+    document.getElementById('btn-stop-nav').addEventListener('click', () => {
+      isNavigating = false;
+      is3D = false;
+      targetZoom = 1.0;
+      cameraX = mapCenter.x;
+      cameraY = mapCenter.y;
+
+      hudPanel.classList.add('-translate-y-12', 'opacity-0', 'pointer-events-none');
+      hudBottomBar.classList.add('translate-y-12', 'opacity-0', 'pointer-events-none');
+
+      setTimeout(() => {
+        routePanel.classList.remove('-translate-x-12', 'opacity-0', 'pointer-events-none');
+      }, 150);
+    });
+
+    // Start Rendering Map Engine
+    renderMap();
+  </script>
+</body>
+</html>
